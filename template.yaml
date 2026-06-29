@@ -557,7 +557,6 @@ Resources:
   RecipeBucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: !Sub "${AWS::StackName}-recipes"
       CorsConfiguration:
         CorsRules:
           - AllowedOrigins:
