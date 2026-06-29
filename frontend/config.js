@@ -2,5 +2,6 @@
 window.APP_CONFIG = {
   API_BASE_URL: 'http://localhost:3000',
   ENVIRONMENT: 'LOCAL',
-  USE_MOCK: true
+  USE_MOCK: true,
+  ADUDVALUETOTRIGGERPUSH: 1000
 };
