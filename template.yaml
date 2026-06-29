@@ -1,0 +1,604 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: PlannerAndShopList - Meal Planner and Shopping List Application
+
+Transform:
+  - AWS::Serverless-2016-10-31
+
+Globals:
+  Function:
+    Runtime: nodejs24.x
+    CodeUri: .
+    Environment:
+      Variables:
+        TABLE_NAME: !Ref PlannerTable
+        AUTH_SECRET: !Sub "${AWS::StackName}-auth-secret-2026"
+        RECIPE_BUCKET: !Ref RecipeBucket
+
+Parameters:
+  StageName:
+    Type: String
+    Default: Stage
+    Description: "The deployment stage name passed from your branch workflow"
+
+Resources:
+
+  # =========================
+  # HTTP API
+  # =========================
+  PlannerApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: !Ref StageName
+      Description: "PlannerAndShopList HTTP API"
+      CorsConfiguration:
+        AllowOrigins:
+          - https://ffarquar.github.io
+        AllowHeaders:
+          - Content-Type
+          - Authorization
+          - X-Amz-Date
+          - X-Api-Key
+        AllowMethods:
+          - GET
+          - POST
+          - PUT
+          - DELETE
+          - OPTIONS
+        MaxAge: 600
+      Auth:
+        DefaultAuthorizer: LambdaTokenAuthorizer
+        Authorizers:
+          LambdaTokenAuthorizer:
+            FunctionArn: !GetAtt AuthorizerFunction.Arn
+            AuthorizerPayloadFormatVersion: "1.0"
+            AuthorizerResultTtlInSeconds: 0
+            Identity:
+              Headers:
+                - Authorization
+
+  # =========================
+  # LOGIN (PUBLIC)
+  # =========================
+  LoginFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/login.handler
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref PlannerTable
+      Events:
+        LoginUser:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref PlannerApi
+            Path: /login
+            Method: POST
+            Auth:
+              Authorizer: NONE
+
+  # =========================
+  # AUTHORIZER
+  # =========================
+  AuthorizerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/authorizer.handler
+
+  AuthorizerInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt AuthorizerFunction.Arn
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${PlannerApi}/*"
+
+  # =========================
+  # ADMIN USER MANAGEMENT
+  # =========================
+  AdminUsersListFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/admin/users-list.handler
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref PlannerTable
+      Events:
+        GetAdminUsers:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref PlannerApi
+            Path: /admin/users
+            Method: GET
+
+  AdminUsersCreateFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/admin/users-create.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PlannerTable
+      Events:
+        PostAdminUser:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref PlannerApi
+            Path: /admin/users
+            Method: POST
+
+  AdminUsersUpdateFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/admin/users-update.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PlannerTable
+      Events:
+        PutAdminUser:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref PlannerApi
+            Path: /admin/users/{loginID}
+            Method: PUT
+
+  AdminUsersPasswordFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/admin/users-password.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PlannerTable
+      Events:
+        PutAdminUserPassword:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref PlannerApi
+            Path: /admin/users/{loginID}/password
+            Method: PUT
+
+  AdminUsersDeleteFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/admin/users-delete.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PlannerTable
+      Events:
+        DeleteAdminUser:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref PlannerApi
+            Path: /admin/users/{loginID}
+            Method: DELETE
+
+  # =========================
+  # MEAL PLANS
+  # =========================
+  MealPlansListFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/mealplans/mealplans-list.handler
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref PlannerTable
+      Events:
+        GetMealPlans:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref PlannerApi
+            Path: /mealplans
+            Method: GET
+
+  MealPlanCreateFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/mealplans/mealplans-create.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PlannerTable
+      Events:
+        PostMealPlan:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref PlannerApi
+            Path: /mealplans
+            Method: POST
+
+  MealPlanGetFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/mealplans/mealplans-get.handler
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref PlannerTable
+      Events:
+        GetMealPlan:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref PlannerApi
+            Path: /mealplans/{id}
+            Method: GET
+
+  MealPlanUpdateFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/mealplans/mealplans-update.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PlannerTable
+      Events:
+        PutMealPlan:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref PlannerApi
+            Path: /mealplans/{id}
+            Method: PUT
+
+  MealPlanDeleteFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/mealplans/mealplans-delete.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PlannerTable
+      Events:
+        DeleteMealPlan:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref PlannerApi
+            Path: /mealplans/{id}
+            Method: DELETE
+
+  # =========================
+  # DAY MEALS
+  # =========================
+  DayMealsListFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/daymeals/daymeals-list.handler
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref PlannerTable
+      Events:
+        GetDayMeals:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref PlannerApi
+            Path: /mealplans/{id}/daymeals
+            Method: GET
+
+  DayMealUpsertFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/daymeals/daymeals-upsert.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PlannerTable
+      Events:
+        PutDayMeal:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref PlannerApi
+            Path: /mealplans/{id}/daymeals/{date}/{mealTime}
+            Method: PUT
+
+  DayMealDeleteFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/daymeals/daymeals-delete.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PlannerTable
+      Events:
+        DeleteDayMeal:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref PlannerApi
+            Path: /mealplans/{id}/daymeals/{date}/{mealTime}
+            Method: DELETE
+
+  # =========================
+  # DISHES
+  # =========================
+  DishesListFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/dishes/dishes-list.handler
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref PlannerTable
+      Events:
+        GetDishes:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref PlannerApi
+            Path: /dishes
+            Method: GET
+
+  DishCreateFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/dishes/dishes-create.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PlannerTable
+      Events:
+        PostDish:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref PlannerApi
+            Path: /dishes
+            Method: POST
+
+  DishGetFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/dishes/dishes-get.handler
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref PlannerTable
+      Events:
+        GetDish:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref PlannerApi
+            Path: /dishes/{id}
+            Method: GET
+
+  DishUpdateFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/dishes/dishes-update.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PlannerTable
+      Events:
+        PutDish:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref PlannerApi
+            Path: /dishes/{id}
+            Method: PUT
+
+  DishDeleteFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/dishes/dishes-delete.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PlannerTable
+        - S3CrudPolicy:
+            BucketName: !Ref RecipeBucket
+      Events:
+        DeleteDish:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref PlannerApi
+            Path: /dishes/{id}
+            Method: DELETE
+
+  DishRecipeUploadUrlFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/dishes/dishes-recipe-upload-url.handler
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref PlannerTable
+        - S3WritePolicy:
+            BucketName: !Ref RecipeBucket
+      Events:
+        GetDishRecipeUploadUrl:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref PlannerApi
+            Path: /dishes/{id}/recipe-upload-url
+            Method: GET
+
+  DishRecipeDownloadUrlFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/dishes/dishes-recipe-download-url.handler
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref PlannerTable
+        - S3ReadPolicy:
+            BucketName: !Ref RecipeBucket
+      Events:
+        GetDishRecipeDownloadUrl:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref PlannerApi
+            Path: /dishes/{id}/recipe-download-url
+            Method: GET
+
+  # =========================
+  # SHOPPING LIST
+  # =========================
+  ShoppingListGetFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/shoppinglist/shoppinglist-get.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PlannerTable
+      Events:
+        GetShoppingList:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref PlannerApi
+            Path: /shoppinglists/{mealPlanId}
+            Method: GET
+
+  ShoppingListRefreshFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/shoppinglist/shoppinglist-refresh.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PlannerTable
+      Events:
+        RefreshShoppingList:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref PlannerApi
+            Path: /shoppinglists/{mealPlanId}/refresh
+            Method: POST
+
+  ShoppingListItemCreateFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/shoppinglist/shoppinglistitem-create.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PlannerTable
+      Events:
+        PostShoppingListItem:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref PlannerApi
+            Path: /shoppinglists/{mealPlanId}/items
+            Method: POST
+
+  ShoppingListItemUpdateFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/shoppinglist/shoppinglistitem-update.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PlannerTable
+      Events:
+        PutShoppingListItem:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref PlannerApi
+            Path: /shoppinglists/{mealPlanId}/items/{itemId}
+            Method: PUT
+
+  ShoppingListItemDeleteFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/shoppinglist/shoppinglistitem-delete.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PlannerTable
+      Events:
+        DeleteShoppingListItem:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref PlannerApi
+            Path: /shoppinglists/{mealPlanId}/items/{itemId}
+            Method: DELETE
+
+  # =========================
+  # STORES
+  # =========================
+  StoresListFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/stores/stores-list.handler
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref PlannerTable
+      Events:
+        GetStores:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref PlannerApi
+            Path: /stores
+            Method: GET
+
+  StoreCreateFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/stores/stores-create.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PlannerTable
+      Events:
+        PostStore:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref PlannerApi
+            Path: /stores
+            Method: POST
+
+  StoreUpdateFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/stores/stores-update.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PlannerTable
+      Events:
+        PutStore:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref PlannerApi
+            Path: /stores/{id}
+            Method: PUT
+
+  StoreDeleteFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/stores/stores-delete.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PlannerTable
+      Events:
+        DeleteStore:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref PlannerApi
+            Path: /stores/{id}
+            Method: DELETE
+
+  # =========================
+  # S3 - RECIPE ATTACHMENTS
+  # =========================
+  RecipeBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${AWS::StackName}-recipes"
+      CorsConfiguration:
+        CorsRules:
+          - AllowedOrigins:
+              - https://ffarquar.github.io
+            AllowedMethods:
+              - GET
+              - PUT
+            AllowedHeaders:
+              - "*"
+            MaxAge: 3000
+      Tags:
+        - Key: Application
+          Value: PlannerAndShopList
+
+  # =========================
+  # DYNAMODB
+  # =========================
+  PlannerTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${AWS::StackName}-Data"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+      Tags:
+        - Key: Application
+          Value: PlannerAndShopList
+
+Outputs:
+  WebEndpoint:
+    Description: "API Gateway endpoint URL"
+    Value: !Sub "https://${PlannerApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/${StageName}/"

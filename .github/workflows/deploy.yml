@@ -1,0 +1,161 @@
+name: Deploy PlannerAndShopList
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - develop
+      - main
+
+permissions:
+  id-token: write
+  contents: read
+  pages: write
+  deployments: write
+
+concurrency:
+  group: aws-sam-deploy-${{ github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+
+  deploy-staging:
+    if: github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    environment: staging
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ap-southeast-2
+
+      - uses: aws-actions/setup-sam@v2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build
+        run: sam build
+
+      - name: Deploy to AWS (Staging)
+        run: |
+          sam deploy \
+            --stack-name PLANNER-STAGING \
+            --region ap-southeast-2 \
+            --resolve-s3 \
+            --no-confirm-changeset \
+            --no-fail-on-empty-changeset \
+            --force-upload \
+            --capabilities CAPABILITY_IAM \
+            --parameter-overrides "StageName=Stage"
+
+      - name: Generate Frontend Configuration
+        run: |
+          API_URL=$(aws cloudformation describe-stacks \
+            --stack-name "PLANNER-STAGING" \
+            --region ap-southeast-2 \
+            --query "Stacks[0].Outputs[?OutputKey=='WebEndpoint'].OutputValue" \
+            --output text)
+
+          API_URL_CLEAN=$(echo "$API_URL" | awk '{print $1}' | sed 's/\/$//')
+
+          echo "window.APP_CONFIG = { API_BASE_URL: '$API_URL_CLEAN', ENVIRONMENT: 'STAGING' };" > frontend/config.js
+          echo "API URL: $API_URL_CLEAN"
+
+      - name: Generate Version File
+        env:
+          BUILD_NUM: ${{ github.run_number }}
+        run: |
+          printf '{ "build": %s }' "$BUILD_NUM" > frontend/version.json
+          sed -i "s|const CACHE_NAME = '.*'|const CACHE_NAME = 'planner-v${BUILD_NUM}'|" frontend/sw.js
+
+      - name: Patch manifest for Staging
+        run: |
+          sed -i 's/"name": "Planner \& Shop List"/"name": "Planner \& Shop List (Staging)"/g' frontend/manifest.json
+          sed -i 's/"short_name": "Planner"/"short_name": "Planner STG"/g' frontend/manifest.json
+          sed -i 's|"id": "/PlannerAndShopList/login.html"|"id": "/PlannerAndShopList-staging/login.html"|g' frontend/manifest.json
+
+      - name: Deploy to GitHub Pages (Staging)
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          personal_token: ${{ secrets.GH_PAT }}
+          external_repository: FFarquar/PlannerAndShopList-staging
+          publish_branch: gh-pages
+          publish_dir: ./frontend
+
+
+  deploy-production:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+
+    concurrency:
+      group: aws-sam-prod-planner
+      cancel-in-progress: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ap-southeast-2
+
+      - uses: aws-actions/setup-sam@v2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build
+        run: sam build
+
+      - name: Deploy to AWS (Production)
+        run: |
+          sam deploy \
+            --stack-name PLANNER-PROD \
+            --region ap-southeast-2 \
+            --resolve-s3 \
+            --no-confirm-changeset \
+            --no-fail-on-empty-changeset \
+            --force-upload \
+            --capabilities CAPABILITY_IAM \
+            --parameter-overrides "StageName=Prod"
+
+      - name: Generate Frontend Configuration
+        run: |
+          API_URL=$(aws cloudformation describe-stacks \
+            --stack-name "PLANNER-PROD" \
+            --region ap-southeast-2 \
+            --query "Stacks[0].Outputs[?OutputKey=='WebEndpoint'].OutputValue" \
+            --output text)
+
+          API_URL_CLEAN=$(echo "$API_URL" | awk '{print $1}' | sed 's/\/$//')
+
+          echo "window.APP_CONFIG = { API_BASE_URL: '$API_URL_CLEAN', ENVIRONMENT: 'PRODUCTION' };" > frontend/config.js
+          echo "API URL: $API_URL_CLEAN"
+
+      - name: Generate Version File
+        env:
+          BUILD_NUM: ${{ github.run_number }}
+        run: |
+          printf '{ "build": %s }' "$BUILD_NUM" > frontend/version.json
+          sed -i "s|const CACHE_NAME = '.*'|const CACHE_NAME = 'planner-v${BUILD_NUM}'|" frontend/sw.js
+
+      - name: Upload Pages Artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: './frontend'
+
+      - name: Deploy to GitHub Pages
+        uses: actions/deploy-pages@v4
