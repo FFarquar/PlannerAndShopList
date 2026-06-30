@@ -54,12 +54,17 @@ export const handler = async (event) => {
     // Key: "<normalizedName>||<unit>"
     const aggregated = new Map();
     for (const dayMeal of (dayMealsResult.Items || [])) {
+      // SK format: DAYMEAL#<date>#<mealTime>
+      const skParts = (dayMeal.SK || '').split('#');
+      const mealSource = { date: skParts[1] || '', mealTime: skParts[2] || '' };
       for (const dish of (dayMeal.dishes || [])) {
         for (const ing of (dish.ingredients || [])) {
           if (!ing.needToBuy) continue;
           const key = `${(ing.name || '').toLowerCase().trim()}||${(ing.unit || '').toLowerCase().trim()}`;
           if (aggregated.has(key)) {
-            aggregated.get(key).totalQuantity += Number(ing.quantity) || 0;
+            const agg = aggregated.get(key);
+            agg.totalQuantity += Number(ing.quantity) || 0;
+            agg.mealSources.push(mealSource);
           } else {
             aggregated.set(key, {
               name: (ing.name || '').trim(),
@@ -67,6 +72,7 @@ export const handler = async (event) => {
               unit: (ing.unit || '').trim(),
               defaultStore: (ing.defaultStore || '').trim(),
               normalizedName: (ing.name || '').toLowerCase().trim(),
+              mealSources: [mealSource],
             });
           }
         }
@@ -114,6 +120,7 @@ export const handler = async (event) => {
         store,
         purchased: false,
         source: 'meal',
+        mealSources: agg.mealSources,
       });
     }
 
