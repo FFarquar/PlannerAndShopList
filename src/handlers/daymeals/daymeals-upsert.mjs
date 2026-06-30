@@ -53,6 +53,7 @@ export const handler = async (event) => {
       mealPlanId: id,
       date,
       mealTime,
+      eatingOut: Boolean(body.eatingOut),
       dishes,
       updatedDate: new Date().toISOString(),
     };
