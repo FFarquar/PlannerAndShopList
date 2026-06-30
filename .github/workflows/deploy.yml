@@ -44,6 +44,19 @@ jobs:
       - name: Build
         run: sam build
 
+      - name: Delete stack if in ROLLBACK_COMPLETE
+        run: |
+          STATUS=$(aws cloudformation describe-stacks \
+            --stack-name PLANNER-STAGING \
+            --region ap-southeast-2 \
+            --query "Stacks[0].StackStatus" \
+            --output text 2>/dev/null || echo "DOES_NOT_EXIST")
+          if [ "$STATUS" = "ROLLBACK_COMPLETE" ]; then
+            echo "Stack in ROLLBACK_COMPLETE — deleting before redeploy"
+            aws cloudformation delete-stack --stack-name PLANNER-STAGING --region ap-southeast-2
+            aws cloudformation wait stack-delete-complete --stack-name PLANNER-STAGING --region ap-southeast-2
+          fi
+
       - name: Deploy to AWS (Staging)
         run: |
           sam deploy \
