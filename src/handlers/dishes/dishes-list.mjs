@@ -7,13 +7,20 @@ const TABLE_NAME = process.env.TABLE_NAME;
 
 export const handler = async () => {
   try {
-    const result = await ddb.send(new ScanCommand({
-      TableName: TABLE_NAME,
-      FilterExpression: 'entityType = :type',
-      ExpressionAttributeValues: { ':type': 'DISH' },
-    }));
+    const items = [];
+    let lastKey;
+    do {
+      const result = await ddb.send(new ScanCommand({
+        TableName: TABLE_NAME,
+        FilterExpression: 'entityType = :type',
+        ExpressionAttributeValues: { ':type': 'DISH' },
+        ...(lastKey && { ExclusiveStartKey: lastKey }),
+      }));
+      items.push(...(result.Items || []));
+      lastKey = result.LastEvaluatedKey;
+    } while (lastKey);
 
-    const dishes = (result.Items || []).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    const dishes = items.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
 
     return {
       statusCode: 200,
