@@ -85,8 +85,9 @@ jobs:
       - name: Generate Version File
         env:
           BUILD_NUM: ${{ github.run_number }}
+          COMMIT_SHA: ${{ github.sha }}
         run: |
-          printf '{ "build": %s }' "$BUILD_NUM" > frontend/version.json
+          printf '{ "build": %s, "commit": "%s" }' "$BUILD_NUM" "$COMMIT_SHA" > frontend/version.json
           sed -i "s|const CACHE_NAME = '.*'|const CACHE_NAME = 'planner-v${BUILD_NUM}'|" frontend/sw.js
 
       - name: Patch manifest for Staging
@@ -161,8 +162,9 @@ jobs:
       - name: Generate Version File
         env:
           BUILD_NUM: ${{ github.run_number }}
+          COMMIT_SHA: ${{ github.sha }}
         run: |
-          printf '{ "build": %s }' "$BUILD_NUM" > frontend/version.json
+          printf '{ "build": %s, "commit": "%s" }' "$BUILD_NUM" "$COMMIT_SHA" > frontend/version.json
           sed -i "s|const CACHE_NAME = '.*'|const CACHE_NAME = 'planner-v${BUILD_NUM}'|" frontend/sw.js
 
       - name: Upload Pages Artifact
