@@ -410,6 +410,19 @@ Resources:
             Path: /dishes/{id}/recipe-download-url
             Method: GET
 
+  DishScrapeRecipeFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/dishes/dishes-scrape-recipe.handler
+      Timeout: 15
+      Events:
+        GetDishScrapeRecipe:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref PlannerApi
+            Path: /dishes/scrape-recipe
+            Method: GET
+
   # =========================
   # SHOPPING LIST
   # =========================
