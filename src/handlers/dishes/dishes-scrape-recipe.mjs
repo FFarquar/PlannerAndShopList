@@ -96,9 +96,19 @@ function parseIngredientObject(obj) {
   return parseIngredient(String(text));
 }
 
+function decodeHtmlEntities(s) {
+  return s
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&nbsp;/g, ' ');
+}
+
 function parseIngredient(raw) {
-  // Normalise unicode fractions to ASCII equivalents
-  let s = raw.trim();
+  // Decode HTML entities and normalise unicode fractions
+  let s = decodeHtmlEntities(raw.trim());
   for (const [u, a] of Object.entries(UNICODE_FRACTIONS)) {
     s = s.replaceAll(u, a + ' ');
   }
@@ -131,6 +141,11 @@ function parseIngredient(raw) {
     .trim();
 
   if (!name) name = raw.replace(/,.*$/, '').trim();
+
+  // Strip leading slash and any secondary quantity+unit that follows (e.g. "/ 1.6 lb", "/500g")
+  name = name.replace(/^\/\s*(?:\d+(?:[,.]\d+)?\s*[a-z"']+\s+)?/i, '').trim();
+  // Strip trailing unmatched closing brackets
+  name = name.replace(/[\s)]+$/, '').trim();
 
   return { name, quantity, unit };
 }

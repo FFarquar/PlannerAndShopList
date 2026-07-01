@@ -49,6 +49,14 @@ export const handler = async (event) => {
       }
     }
 
+    if (body.recipeNotes !== undefined) {
+      if (body.recipeNotes) {
+        setUpdates.recipeNotes = body.recipeNotes.trim();
+      } else {
+        removeFields.push('recipeNotes');
+      }
+    }
+
     if (body.recipeAttachment !== undefined) {
       if (body.recipeAttachment) {
         setUpdates.recipeAttachment = {
