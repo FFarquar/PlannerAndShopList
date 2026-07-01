@@ -87,7 +87,8 @@ jobs:
           BUILD_NUM: ${{ github.run_number }}
           COMMIT_SHA: ${{ github.sha }}
         run: |
-          printf '{ "build": %s, "commit": "%s" }' "$BUILD_NUM" "$COMMIT_SHA" > frontend/version.json
+          COMMIT_DATE=$(git log -1 --format='%cI' HEAD)
+          printf '{ "build": %s, "commit": "%s", "commitDate": "%s" }' "$BUILD_NUM" "$COMMIT_SHA" "$COMMIT_DATE" > frontend/version.json
           sed -i "s|const CACHE_NAME = '.*'|const CACHE_NAME = 'planner-v${BUILD_NUM}'|" frontend/sw.js
 
       - name: Patch manifest for Staging
@@ -164,7 +165,8 @@ jobs:
           BUILD_NUM: ${{ github.run_number }}
           COMMIT_SHA: ${{ github.sha }}
         run: |
-          printf '{ "build": %s, "commit": "%s" }' "$BUILD_NUM" "$COMMIT_SHA" > frontend/version.json
+          COMMIT_DATE=$(git log -1 --format='%cI' HEAD)
+          printf '{ "build": %s, "commit": "%s", "commitDate": "%s" }' "$BUILD_NUM" "$COMMIT_SHA" "$COMMIT_DATE" > frontend/version.json
           sed -i "s|const CACHE_NAME = '.*'|const CACHE_NAME = 'planner-v${BUILD_NUM}'|" frontend/sw.js
 
       - name: Upload Pages Artifact
