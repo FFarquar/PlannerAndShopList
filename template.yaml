@@ -52,10 +52,10 @@ Resources:
           LambdaTokenAuthorizer:
             FunctionArn: !GetAtt AuthorizerFunction.Arn
             AuthorizerPayloadFormatVersion: "1.0"
-            AuthorizerResultTtlInSeconds: 300
             Identity:
               Headers:
                 - Authorization
+              ReauthorizeEvery: 300
 
   # =========================
   # LOGIN (PUBLIC)
