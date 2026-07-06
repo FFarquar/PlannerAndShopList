@@ -424,6 +424,29 @@ Resources:
             Path: /dishes/scrape-recipe
             Method: GET
 
+  DishRecipeExtractIngredientsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/dishes/dishes-recipe-extract-ingredients.handler
+      Timeout: 20
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref PlannerTable
+        - S3ReadPolicy:
+            BucketName: !Ref RecipeBucket
+        - Statement:
+            - Effect: Allow
+              Action:
+                - textract:DetectDocumentText
+              Resource: "*"
+      Events:
+        GetDishRecipeExtractIngredients:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref PlannerApi
+            Path: /dishes/{id}/recipe-extract-ingredients
+            Method: GET
+
   # =========================
   # SHOPPING LIST
   # =========================
