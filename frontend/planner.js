@@ -112,8 +112,9 @@ function showToast(msg) {
 // =====================
 // Confirm dialog
 // =====================
-function showConfirm(msg, cb) {
+function showConfirm(msg, cb, okLabel = 'Delete') {
   document.getElementById('confirmMsg').textContent = msg;
+  document.getElementById('confirmOkBtn').textContent = okLabel;
   _confirmCallback = cb;
   document.getElementById('confirmOverlay').classList.add('open');
 }
@@ -203,7 +204,10 @@ async function addStoreFromModal() {
 // =====================
 // Create plan modal
 // =====================
+let planModalMode = 'create'; // 'create' | 'edit'
+
 function showCreatePlanModal() {
+  planModalMode = 'create';
   document.getElementById('planModalTitle').textContent = 'New Meal Plan';
   document.getElementById('planName').value = '';
   // Default: start = next Monday, end = following Sunday
@@ -237,12 +241,90 @@ function toggleCopyMealsSelect() {
 function closePlanModal() {
   document.getElementById('planModal').classList.remove('open');
 }
+
+// =====================
+// Edit plan modal
+// =====================
+function showEditPlanModal() {
+  planModalMode = 'edit';
+  document.getElementById('planModalTitle').textContent = 'Edit Meal Plan';
+  document.getElementById('planName').value = currentPlan.name;
+  document.getElementById('planStartDate').value = currentPlan.startDate;
+  document.getElementById('planEndDate').value = currentPlan.endDate;
+  document.getElementById('copyMealsCheck').checked = false;
+  document.getElementById('copyMealsSelectRow').style.display = 'none';
+  document.getElementById('copyMealsRow').style.display = 'none';
+  document.getElementById('planModal').classList.add('open');
+}
+
+async function submitEditPlan(name, startDate, endDate) {
+  // Meals that have actual content (dishes or eating-out) but fall outside the new
+  // date range would become invisible in the grid — deleting them keeps the plan and
+  // its day meals consistent, so the user is warned before it happens.
+  const outOfRange = Object.entries(currentDayMeals).filter(([, dm]) => {
+    if (!dm) return false;
+    const hasContent = Boolean(dm.eatingOut) || (dm.dishes || []).length > 0;
+    return hasContent && (dm.date < startDate || dm.date > endDate);
+  });
+
+  const applyUpdate = async () => {
+    try {
+      await apiPut(`/mealplans/${currentPlanId}`, { name, startDate, endDate });
+
+      for (const [sk, dm] of outOfRange) {
+        try {
+          await apiDelete(`/mealplans/${currentPlanId}/daymeals/${dm.date}/${dm.mealTime}`);
+        } catch (err) {
+          console.error(`Failed to delete out-of-range meal ${sk}:`, err.message);
+        }
+        delete currentDayMeals[sk];
+        mockRemoveDayMeal(currentPlanId, dm.date, dm.mealTime);
+      }
+
+      currentPlan.name = name;
+      currentPlan.startDate = startDate;
+      currentPlan.endDate = endDate;
+      const cached = plansCache.find(p => p.mealPlanId === currentPlanId);
+      if (cached) { cached.name = name; cached.startDate = startDate; cached.endDate = endDate; }
+      if (localStorage.getItem(`plan-info-${currentPlanId}`)) {
+        localStorage.setItem(`plan-info-${currentPlanId}`, JSON.stringify({ name, startDate, endDate }));
+      }
+
+      closePlanModal();
+      document.getElementById('planDetailTitle').textContent = "Plan for " + currentPlan.name;
+      renderDateGrid();
+      renderPlansGrid(plansCache);
+      showToast(outOfRange.length
+        ? `Plan updated — ${outOfRange.length} meal${outOfRange.length !== 1 ? 's' : ''} removed`
+        : 'Plan updated');
+    } catch (err) {
+      showToast(err.message);
+    }
+  };
+
+  if (outOfRange.length > 0) {
+    showConfirm(
+      `Changing the date range will delete ${outOfRange.length} meal${outOfRange.length !== 1 ? 's' : ''} that ${outOfRange.length !== 1 ? 'fall' : 'falls'} outside the new range. Continue?`,
+      applyUpdate,
+      'Continue'
+    );
+  } else {
+    await applyUpdate();
+  }
+}
+
 async function submitPlanModal() {
   const name = document.getElementById('planName').value.trim();
   const startDate = document.getElementById('planStartDate').value;
   const endDate = document.getElementById('planEndDate').value;
   if (!name || !startDate || !endDate) { showToast('All fields are required'); return; }
   if (startDate > endDate) { showToast('Start date must be before end date'); return; }
+
+  if (planModalMode === 'edit') {
+    await submitEditPlan(name, startDate, endDate);
+    return;
+  }
+
   const copyEnabled = document.getElementById('copyMealsCheck').checked;
   const copySourceId = copyEnabled ? document.getElementById('copyMealsSelect').value : null;
   try {
@@ -386,6 +468,7 @@ async function openPlan(planId) {
       }));
       window.location.href = `shopping.html?planId=${planId}`;
     };
+    document.getElementById('editPlanBtn').onclick = () => showEditPlanModal();
     document.getElementById('deletePlanBtn').onclick = () => deletePlanFromDetail();
 
     renderDateGrid();
