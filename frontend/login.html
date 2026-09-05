@@ -94,6 +94,10 @@
   <script src="./config.js"></script>
   <script src="./apiClient.js"></script>
   <script>
+    if (getAuthToken()) {
+      window.location.href = 'planner.html';
+    }
+
     const env = window.APP_CONFIG?.ENVIRONMENT || 'LOCAL';
     const badge = document.getElementById('envBadge');
     badge.textContent = env;

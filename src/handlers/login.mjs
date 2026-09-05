@@ -99,12 +99,12 @@ export const handler = async (event) => {
       loginID: user.loginID,
       role: user.role || 'USER',
       iat: now,
-      exp: now + 604800,
+      exp: now + 15552000,
     });
 
     return {
       statusCode: 200,
-      body: JSON.stringify({ accessToken: token, token, tokenType: 'Bearer', expiresIn: 604800, role: user.role || 'USER' }),
+      body: JSON.stringify({ accessToken: token, token, tokenType: 'Bearer', expiresIn: 15552000, role: user.role || 'USER' }),
     };
   } catch (error) {
     console.error(error);
