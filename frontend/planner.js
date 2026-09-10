@@ -77,16 +77,18 @@ async function init() {
   }
 
   // Load supporting data and plans in parallel
-  const [dishes, stores] = await Promise.all([
+  const [dishes, stores, plans] = await Promise.all([
     loadDishes(),
     apiGet('/stores', 'mock-stores.json').catch(() => []),
+    apiGet('/mealplans', 'mock-mealplans.json'),
   ]);
   allDishes = dishes || [];
   allStores = stores || [];
+  plansCache = Array.isArray(plans) ? plans : [];
   buildIngredientSuggestions();
 
   setupGridDragAndDrop();
-  await loadPlans();
+  renderPlansGrid(plansCache);
 }
 
 // =====================
