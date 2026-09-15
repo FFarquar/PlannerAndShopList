@@ -35,12 +35,18 @@ async function init() {
     return;
   }
 
-  const stores = await apiGet('/stores', 'mock-stores.json').catch(() => []);
+  // Stores and the shopping list itself are independent — load them in parallel
+  // instead of one after another, which used to flash the loading spinner twice.
+  const [stores] = await Promise.all([
+    apiGet('/stores', 'mock-stores.json').catch(() => []),
+    (async () => {
+      await seedMockDayMealsIfNeeded(); // must finish before loadShoppingList() reads the seeded mock data
+      await loadShoppingList();
+    })(),
+  ]);
   allStores = stores || [];
   populateStoreDropdown();
 
-  await seedMockDayMealsIfNeeded();
-  await loadShoppingList();
   wireAddNameAutocomplete();
   buildItemHistory(); // fire-and-forget — autocomplete just stays empty until this resolves
 }
@@ -583,8 +589,8 @@ async function buildItemHistory() {
 
     const seen = new Map();
     const completeness = it => (it.totalQuantity ? 1 : 0) + (it.unit ? 1 : 0) + (it.store ? 1 : 0);
-    for (const p of previousPlans) {
-      const items = await getPlanItems(p.mealPlanId);
+    const itemsByPlan = await Promise.all(previousPlans.map(p => getPlanItems(p.mealPlanId)));
+    for (const items of itemsByPlan) {
       for (const it of items) {
         const key = (it.name || '').toLowerCase().trim();
         if (!key) continue;
